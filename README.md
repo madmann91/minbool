@@ -2,7 +2,7 @@
 
 This project is a boolean expression simplifier in C++. It uses the Quine–McCluskey algorithm to compute the set of prime implicants, and then runs Petrick's method to find the minimum sum of products solution.
 
-This project does not depend on any other library, except of course the standard C++ library.
+This project does not depend on any other library, except of course the standard C++ library. It is distributed under the MIT license.
 
 ## Building and Running
 
@@ -11,7 +11,7 @@ This project does not depend on any other library, except of course the standard
 
 ## Using the Simplifier
 
-The boolean function to simplify is represented as two vectors containing the set of values for which the function evaluates to `true`, and the set of values for which the values of the function does not matter (it can be either 0 or 1).
+The boolean function to simplify is represented as two vectors containing the set of values for which the function evaluates to 1, and the set of values for which the values of the function does not matter (it can be either 0 or 1).
 
 Consider the following example for a function of 4 variables (X mark "don't care" values):
 
@@ -41,3 +41,15 @@ std::vector<uint8_t> on { 4, 8, 10, 11, 12, 15 };
 std::vector<uint8_t> dc { 9, 14 };
 auto solution = minimize_boolean<4>(on, dc);
 ```
+
+The function `minimize_boolean` takes the number of bits to consider as a template argument, and the two vectors containing the definition of the function as described above. The result is a vector of `MinTerm` objects representing the sum of products found during minimization. For the example above, the result will be (one `MinTerm` per line):
+
+    -100
+    1-1-
+    10--
+
+This is equivalent to the minimal boolean expression:
+
+    BC'D' + AC + AB'
+
+As demonstrated in this example, a `MinTerm` indicates, for each variable, if it is present in the product (`1`), present but negated (`0`), or not present at all (`-`). The state of every variable in the product is read from left to right (i.e. in the example, the leftmost symbol represents the state of variable A, and the right most symbol the state of variable D).
