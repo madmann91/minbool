@@ -6,8 +6,8 @@ This project does not depend on any other library, except of course the standard
 
 ## Building and Running
 
-    g++ min_bool.cpp -pedantic -Wall -Wextra -O3 -DNDEBUG -march=native -std=c++11 -o min_bool
-    ./min_bool
+    g++ minbool.cpp -pedantic -Wall -Wextra -O3 -DNDEBUG -march=native -std=c++11 -o minbool
+    ./minbool
 
 ## Using the Simplifier
 
