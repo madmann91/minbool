@@ -5,7 +5,9 @@
 #include <unordered_set>
 #include <random>
 #include <chrono>
+#include <bitset>
 #include <iostream>
+#include <fstream>
 
 inline size_t popcount(uint8_t  n) { return __builtin_popcount(n);   }
 inline size_t popcount(uint16_t n) { return __builtin_popcount(n);   }
@@ -211,13 +213,16 @@ struct PrimeChart {
         });
     }
 
-    void simplify() {
+    bool simplify() {
+        bool change = false;
+
         for (auto& pair1 : columns) {
             for (auto& pair2 : columns) {
                 if (pair1.first == pair2.first)
                     continue;
                 if (dominates(pair2.second, pair1.second)) {
                     columns.erase(pair2.first);
+                    change = true;
                     break;
                 }
             }
@@ -236,6 +241,7 @@ struct PrimeChart {
                     continue;
                 if (dominates(pair1.second, pair2.second)) {
                     rows.erase(pair2.first);
+                    change = true;
                     break;
                 }
             }
@@ -245,6 +251,8 @@ struct PrimeChart {
             for (auto& value : pair.second)
                 columns[value].emplace_back(pair.first);
         }
+
+        return change;
     }
 
     template <typename T>
@@ -310,9 +318,10 @@ std::vector<MinTerm<Nbits>> minimize_boolean(
 
     std::vector<MinTerm<Nbits>> solution;
     do {
-        if (!chart.remove_essentials(solution))
+        bool change = chart.remove_essentials(solution);
+        change |= chart.simplify();
+        if (!change)
             chart.remove_heuristic(solution);
-        chart.simplify();
     } while (chart.size() > 0);
 
     return solution;
@@ -324,11 +333,11 @@ int main(int argc, char** argv) {
     //std::vector<uint8_t> dc { 1, 4, 5, 7, 8, 11, 14 };
     //std::vector<uint8_t> on { 4, 8, 10, 11, 12, 15 };
     //std::vector<uint8_t> dc { 9, 14 };
-    std::random_device rd;
-    std::mt19937 gen(std::chrono::duration_cast<std::chrono::seconds>(start.time_since_epoch()).count());
-    auto rand32 = std::uniform_int_distribution<size_t>(0, 32);
-    auto rand128 = std::uniform_int_distribution<size_t>(0, 128);
-    auto rand255 = std::uniform_int_distribution<size_t>(0, 255);
+    auto seed = std::chrono::duration_cast<std::chrono::seconds>(start.time_since_epoch()).count();
+    std::mt19937 gen(seed);
+    auto rand32 = std::uniform_int_distribution<size_t>(0, 256);
+    auto rand128 = std::uniform_int_distribution<size_t>(0, 1024);
+    auto rand255 = std::uniform_int_distribution<size_t>(0, 65536 - 1);
     std::unordered_set<uint8_t> on_set, dc_set;
     for (size_t i = 0, n = rand128(gen); i < n; ++i)
         on_set.emplace(rand255(gen));
@@ -337,12 +346,21 @@ int main(int argc, char** argv) {
         if (!on_set.count(value))
             dc_set.emplace();
     }
-    std::vector<uint8_t> on(on_set.begin(), on_set.end());
-    std::vector<uint8_t> dc(dc_set.begin(), dc_set.end());
-    auto solution = minimize_boolean<8>(on, dc);
+    std::vector<uint16_t> on(on_set.begin(), on_set.end());
+    std::vector<uint16_t> dc(dc_set.begin(), dc_set.end());
+    auto solution = minimize_boolean<16>(on, dc);
     auto end = std::chrono::high_resolution_clock::now();
+
     std::cout << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << " ms" << std::endl;
+    std::cout << solution.size() << " terms" << std::endl;
     for (auto& term : solution)
         std::cout << term << std::endl;
+
+    std::ofstream of("test.esp");
+    of << ".i 16\n";
+    of << ".o 1\n";
+    for (auto i : on) of << std::bitset<16>(i) << " 1\n";
+    for (auto i : dc) of << std::bitset<16>(i) << " -\n";
+    of << ".e\n";
     return 0;
 }
