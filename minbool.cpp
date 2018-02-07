@@ -150,6 +150,21 @@ struct ImplicantTable {
 };
 
 template <size_t Nbits>
+std::ostream& operator << (std::ostream& os, const ImplicantTable<Nbits>& table) {
+    for (size_t i = 0; i < Nbits; ++i) {
+        if (!table.terms[i].empty()) {
+            for (size_t j = 0; j < table.terms[i].size(); ++j) {
+                os << table.terms[i][j] << ' ' << (table.marks[i][j] ? 'X' : ' ') << '\n';
+            }
+            for (size_t j = 0; j < Nbits + 2; ++j)
+                os << '-';
+            os << '\n';
+        }
+    }
+    return os;
+}
+
+template <size_t Nbits>
 struct PrimeChart {
     using MinTermN = MinTerm<Nbits>;
     using IntTypeN = typename MinTermN::IntTypeN;
@@ -166,6 +181,8 @@ struct PrimeChart {
                 columns[value].emplace_back(prime);
             });
         }
+        for (auto& pair : columns)
+            std::sort(pair.second.begin(), pair.second.end());
     }
 
     void remove_columns(const std::vector<IntTypeN>& values) {
@@ -179,6 +196,7 @@ struct PrimeChart {
             if (pair.second.size() == 1)
                 essentials.push_back(pair.second.front());
         }
+        // No essential prime has been found
         if (essentials.size() == count)
             return false;
         std::sort(essentials.begin() + count, essentials.end());
@@ -198,7 +216,7 @@ struct PrimeChart {
             for (auto& term : pair.second)
                 covers[term]++;
         }
-        // Remove the term that covers the most columns
+        // Heuristic: Remove the term that covers the most columns
         size_t max_covers = 0;
         MinTermN term;
         for (auto& pair : covers) {
@@ -220,7 +238,9 @@ struct PrimeChart {
             for (auto& pair2 : columns) {
                 if (pair1.first == pair2.first)
                     continue;
-                if (dominates(pair2.second, pair1.second)) {
+                // Dominating columns are eliminated
+                if (std::includes(pair2.second.begin(), pair2.second.end(),
+                                  pair1.second.begin(), pair1.second.end())) {
                     columns.erase(pair2.first);
                     change = true;
                     break;
@@ -228,18 +248,23 @@ struct PrimeChart {
             }
         }
 
+        // Transpose columns => rows
         std::unordered_map<MinTermN, std::vector<IntTypeN>, typename MinTermN::Hash> rows;
         for (auto& pair : columns) {
             for (auto& term : pair.second)
                 rows[term].emplace_back(pair.first);
             pair.second.clear();
         }
+        for (auto& pair : rows)
+            std::sort(pair.second.begin(), pair.second.end());
 
         for (auto& pair1 : rows) {
             for (auto& pair2 : rows) {
                 if (pair1.first == pair2.first)
                     continue;
-                if (dominates(pair1.second, pair2.second)) {
+                // Dominated rows are eliminated
+                if (std::includes(pair1.second.begin(), pair1.second.end(),
+                                  pair2.second.begin(), pair2.second.end())) {
                     rows.erase(pair2.first);
                     change = true;
                     break;
@@ -247,40 +272,17 @@ struct PrimeChart {
             }
         }
 
+        // Transpose rows => columns
         for (auto& pair : rows) {
             for (auto& value : pair.second)
                 columns[value].emplace_back(pair.first);
         }
+        for (auto& pair : columns)
+            std::sort(pair.second.begin(), pair.second.end());
 
         return change;
     }
-
-    template <typename T>
-    static bool dominates(const std::vector<T>& a, const std::vector<T>& b) {
-        if (a.size() < b.size())
-            return false;
-        for (auto& term : a) {
-            if (std::find(b.begin(), b.end(), term) == b.end())
-                return false;
-        }
-        return true;
-    }
 };
-
-template <size_t Nbits>
-std::ostream& operator << (std::ostream& os, const ImplicantTable<Nbits>& table) {
-    for (size_t i = 0; i < Nbits; ++i) {
-        if (!table.terms[i].empty()) {
-            for (size_t j = 0; j < table.terms[i].size(); ++j) {
-                os << table.terms[i][j] << ' ' << (table.marks[i][j] ? 'X' : ' ') << '\n';
-            }
-            for (size_t j = 0; j < Nbits + 2; ++j)
-                os << '-';
-            os << '\n';
-        }
-    }
-    return os;
-}
 
 template <size_t Nbits>
 std::vector<MinTerm<Nbits>> prime_implicants(std::vector<MinTerm<Nbits>>& terms) {
@@ -297,6 +299,41 @@ std::vector<MinTerm<Nbits>> prime_implicants(std::vector<MinTerm<Nbits>>& terms)
         table.primes(primes);
     }
     return primes;
+}
+
+template <size_t Nbits>
+bool eval_boolean(const std::vector<MinTerm<Nbits>>& solution, typename MinTerm<Nbits>::IntTypeN v) {
+    for (auto& term : solution) {
+        bool prod = true;
+        for (size_t i = 0; i < Nbits; ++i) {
+            bool bit = ((v >> i) & 1) ? true : false;
+            if (term[i] == MinTerm<Nbits>::One)
+                prod &= bit;
+            else if (term[i] == MinTerm<Nbits>::Zero)
+                prod &= !bit;
+        }
+        if (prod) return true;
+    }
+    return false;
+}
+
+template <size_t Nbits>
+bool check_solution(const std::vector<MinTerm<Nbits>>& solution,
+                    const std::vector<typename MinTerm<Nbits>::IntTypeN>& on_values,
+                    const std::vector<typename MinTerm<Nbits>::IntTypeN>& dc_values) {
+    using IntTypeN = typename MinTerm<Nbits>::IntTypeN;
+    std::unordered_set<IntTypeN> not_off;
+    for (auto v : on_values) not_off.emplace(v);
+    for (auto v : dc_values) not_off.emplace(v);
+    for (auto v : on_values) {
+        if (!eval_boolean(solution, v))
+            return false;
+    }
+    for (IntTypeN i = (1 << Nbits) - 1; i > 0; --i) {
+        if (not_off.count(i) == 0 && eval_boolean(solution, i))
+            return false;
+    }
+    return not_off.count(0) != 0 || !eval_boolean(solution, 0);
 }
 
 template <size_t Nbits>
@@ -324,6 +361,7 @@ std::vector<MinTerm<Nbits>> minimize_boolean(
             chart.remove_heuristic(solution);
     } while (chart.size() > 0);
 
+    assert(check_solution(solution, on_values, dc_values));
     return solution;
 }
 
@@ -337,14 +375,14 @@ int main(int argc, char** argv) {
     std::mt19937 gen(seed);
     auto rand32 = std::uniform_int_distribution<size_t>(0, 256);
     auto rand128 = std::uniform_int_distribution<size_t>(0, 1024);
-    auto rand255 = std::uniform_int_distribution<size_t>(0, 65536 - 1);
+    auto rand65535 = std::uniform_int_distribution<size_t>(0, 65535);
     std::unordered_set<uint8_t> on_set, dc_set;
     for (size_t i = 0, n = rand128(gen); i < n; ++i)
-        on_set.emplace(rand255(gen));
+        on_set.emplace(rand65535(gen));
     for (size_t i = 0, n = rand32(gen); i < n; ++i) {
-        uint8_t value = rand255(gen);
+        uint8_t value = rand65535(gen);
         if (!on_set.count(value))
-            dc_set.emplace();
+            dc_set.emplace(value);
     }
     std::vector<uint16_t> on(on_set.begin(), on_set.end());
     std::vector<uint16_t> dc(dc_set.begin(), dc_set.end());

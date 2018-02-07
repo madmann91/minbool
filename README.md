@@ -39,7 +39,7 @@ The code to run the simplifier on this function is:
 ```cpp
 std::vector<uint8_t> on { 4, 8, 10, 11, 12, 15 };
 std::vector<uint8_t> dc { 9, 14 };
-auto solution = minimize_boolean<4>(on, dc);
+std::vector<MinTerm<4>> solution = minimize_boolean<4>(on, dc);
 ```
 
 The function `minimize_boolean` takes the number of bits to consider as a template argument, and the two vectors containing the definition of the function as described above. The result is a vector of `MinTerm` objects representing the sum of products found during minimization. For the example above, the result will be (one `MinTerm` per line):
