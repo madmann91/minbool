@@ -2,6 +2,8 @@
 #include <vector>
 #include <algorithm>
 #include <unordered_map>
+#include <unordered_set>
+#include <random>
 #include <chrono>
 #include <iostream>
 
@@ -23,6 +25,13 @@ constexpr size_t compute_int_size(size_t Nbits) {
 template <size_t Nbits>
 struct MinTerm {
     using IntTypeN = typename IntType<compute_int_size(Nbits)>::Type;
+
+    struct Hash {
+        size_t operator () (const MinTerm& term) const {
+            // Bernstein's hash function
+            return 33 * term.value ^ term.dash;
+        }
+    };
 
     enum Value {
         Zero = 0,
@@ -162,18 +171,91 @@ struct PrimeChart {
             columns.erase(value);
     }
 
-    void remove_essentials(std::vector<MinTermN>& res) {
+    bool remove_essentials(std::vector<MinTermN>& essentials) {
+        size_t count = essentials.size();
         for (auto& pair : columns) {
             if (pair.second.size() == 1)
-                res.push_back(pair.second[0]);
+                essentials.push_back(pair.second.front());
         }
-        std::sort(res.begin(), res.end());
-        res.erase(std::unique(res.begin(), res.end()), res.end());
-        for (auto& essential : res) {
-            essential.foreach_value([&] (IntTypeN value) {
+        if (essentials.size() == count)
+            return false;
+        std::sort(essentials.begin() + count, essentials.end());
+        essentials.erase(std::unique(essentials.begin() + count, essentials.end()), essentials.end());
+
+        std::for_each(essentials.begin() + count, essentials.end(), [&] (const MinTermN& term) {
+            term.foreach_value([&] (IntTypeN value) {
                 columns.erase(value);
             });
+        });
+        return true;
+    }
+
+    void remove_heuristic(std::vector<MinTermN>& solution) {
+        std::unordered_map<MinTermN, size_t, typename MinTermN::Hash> covers;
+        for (auto& pair : columns) {
+            for (auto& term : pair.second)
+                covers[term]++;
         }
+        // Remove the term that covers the most columns
+        size_t max_covers = 0;
+        MinTermN term;
+        for (auto& pair : covers) {
+            if (pair.second > max_covers) {
+                max_covers = pair.second;
+                term = pair.first;
+            }
+        }
+        solution.emplace_back(term);
+        term.foreach_value([&] (IntTypeN value) {
+            columns.erase(value);
+        });
+    }
+
+    void simplify() {
+        for (auto& pair1 : columns) {
+            for (auto& pair2 : columns) {
+                if (pair1.first == pair2.first)
+                    continue;
+                if (dominates(pair2.second, pair1.second)) {
+                    columns.erase(pair2.first);
+                    break;
+                }
+            }
+        }
+
+        std::unordered_map<MinTermN, std::vector<IntTypeN>, typename MinTermN::Hash> rows;
+        for (auto& pair : columns) {
+            for (auto& term : pair.second)
+                rows[term].emplace_back(pair.first);
+            pair.second.clear();
+        }
+
+        for (auto& pair1 : rows) {
+            for (auto& pair2 : rows) {
+                if (pair1.first == pair2.first)
+                    continue;
+                if (dominates(pair1.second, pair2.second)) {
+                    rows.erase(pair2.first);
+                    break;
+                }
+            }
+        }
+
+        for (auto& pair : rows) {
+            for (auto& value : pair.second)
+                columns[value].emplace_back(pair.first);
+        }
+    }
+
+    template <typename T>
+    static bool dominates(const std::vector<T>& a, const std::vector<T>& b) {
+        if (a.size() < b.size())
+            return false;
+        for (auto& term : a) {
+            if (std::find(b.begin(), b.end(), term) == b.end())
+                return false;
+        }
+        return true;
     }
 };
 
@@ -274,49 +356,6 @@ std::vector<MinTerm<Nbits>> prime_implicants(std::vector<MinTerm<Nbits>>& terms)
 }
 
 template <size_t Nbits>
-std::vector<MinTerm<Nbits>> simplify_chart(const PrimeChart<Nbits>& chart) {
-    // Petrick's method
-    Sum<Nbits> sum;
-    for (auto& pair : chart.columns) {
-        if (sum.size() == 0) {
-            for (auto& term : pair.second) {
-                Prod<Nbits> prod;
-                prod.mul(term);
-                sum.add(prod);
-            }
-        } else {
-            // Distribute
-            Sum<Nbits> new_sum;
-            for (auto& term : pair.second) {
-                for (auto& prod : sum.prods) {
-                    Prod<Nbits> new_prod(prod);
-                    new_prod.mul(term);
-                    new_sum.add(new_prod);
-                }
-            }
-            sum = std::move(new_sum);
-        }
-    }
-    // Find best product
-    size_t min_terms = std::numeric_limits<size_t>::max();
-    size_t min_literals = std::numeric_limits<size_t>::max();
-    const Prod<Nbits>* found = nullptr;
-    for (auto& prod : sum.prods) {
-        size_t terms = prod.size();
-        if (terms < min_terms) {
-            size_t literals = prod.count_literals();
-            if (literals < min_literals) {
-                found = &prod;
-                min_terms = terms;
-                min_literals = literals;
-            }
-        }
-    }
-    assert(found);
-    return found->terms;
-}
-
-template <size_t Nbits>
 std::vector<MinTerm<Nbits>> minimize_boolean(
     const std::vector<typename MinTerm<Nbits>::IntTypeN>& on_values,
     const std::vector<typename MinTerm<Nbits>::IntTypeN>& dc_values)
@@ -334,12 +373,12 @@ std::vector<MinTerm<Nbits>> minimize_boolean(
     chart.remove_columns(dc_values);
 
     std::vector<MinTerm<Nbits>> solution;
-    chart.remove_essentials(solution);
-    if (chart.size() == 0)
-        return solution;
+    do {
+        if (!chart.remove_essentials(solution))
+            chart.remove_heuristic(solution);
+        chart.simplify();
+    } while (chart.size() > 0);
 
-    auto simplified = simplify_chart(chart);
-    solution.insert(solution.end(), simplified.begin(), simplified.end());
     return solution;
 }
 
@@ -347,11 +386,26 @@ int main(int argc, char** argv) {
     auto start = std::chrono::high_resolution_clock::now();
     //std::vector<uint8_t> on { 9, 12, 13, 15 };
     //std::vector<uint8_t> dc { 1, 4, 5, 7, 8, 11, 14 };
-    std::vector<uint8_t> on { 4, 8, 10, 11, 12, 15 };
-    std::vector<uint8_t> dc { 9, 14 };
-    auto solution = minimize_boolean<4>(on, dc);
+    //std::vector<uint8_t> on { 4, 8, 10, 11, 12, 15 };
+    //std::vector<uint8_t> dc { 9, 14 };
+    std::random_device rd;
+    std::mt19937 gen(std::chrono::duration_cast<std::chrono::seconds>(start.time_since_epoch()).count());
+    auto rand32 = std::uniform_int_distribution<size_t>(0, 32);
+    auto rand128 = std::uniform_int_distribution<size_t>(0, 128);
+    auto rand255 = std::uniform_int_distribution<size_t>(0, 255);
+    std::unordered_set<uint8_t> on_set, dc_set;
+    for (size_t i = 0, n = rand128(gen); i < n; ++i)
+        on_set.emplace(rand255(gen));
+    for (size_t i = 0, n = rand32(gen); i < n; ++i) {
+        uint8_t value = rand255(gen);
+        if (!on_set.count(value))
+            dc_set.emplace();
+    }
+    std::vector<uint8_t> on(on_set.begin(), on_set.end());
+    std::vector<uint8_t> dc(dc_set.begin(), dc_set.end());
+    auto solution = minimize_boolean<8>(on, dc);
     auto end = std::chrono::high_resolution_clock::now();
-    std::cout << std::chrono::duration_cast<std::chrono::microseconds>(end - start).count() << " us" << std::endl;
+    std::cout << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << " ms" << std::endl;
     for (auto& term : solution)
         std::cout << term << std::endl;
     return 0;
