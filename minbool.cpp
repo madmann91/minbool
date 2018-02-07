@@ -366,12 +366,11 @@ std::vector<MinTerm<Nbits>> minimize_boolean(
 }
 
 int main(int argc, char** argv) {
-    auto start = std::chrono::high_resolution_clock::now();
-    //std::vector<uint8_t> on { 9, 12, 13, 15 };
-    //std::vector<uint8_t> dc { 1, 4, 5, 7, 8, 11, 14 };
-    //std::vector<uint8_t> on { 4, 8, 10, 11, 12, 15 };
-    //std::vector<uint8_t> dc { 9, 14 };
-    auto seed = std::chrono::duration_cast<std::chrono::seconds>(start.time_since_epoch()).count();
+    using namespace std::chrono;
+
+    auto seed = duration_cast<seconds>(high_resolution_clock::now().time_since_epoch()).count();
+    std::cout << "seed: " << seed << std::endl;
+
     std::mt19937 gen(seed);
     auto rand32 = std::uniform_int_distribution<size_t>(0, 256);
     auto rand128 = std::uniform_int_distribution<size_t>(0, 1024);
@@ -384,12 +383,14 @@ int main(int argc, char** argv) {
         if (!on_set.count(value))
             dc_set.emplace(value);
     }
+
+    auto start = high_resolution_clock::now();
     std::vector<uint16_t> on(on_set.begin(), on_set.end());
     std::vector<uint16_t> dc(dc_set.begin(), dc_set.end());
     auto solution = minimize_boolean<16>(on, dc);
-    auto end = std::chrono::high_resolution_clock::now();
+    auto end = high_resolution_clock::now();
 
-    std::cout << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << " ms" << std::endl;
+    std::cout << duration_cast<milliseconds>(end - start).count() << " ms" << std::endl;
     std::cout << solution.size() << " terms" << std::endl;
     for (auto& term : solution)
         std::cout << term << std::endl;
