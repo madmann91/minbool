@@ -16,7 +16,7 @@ The boolean function to simplify is represented as two vectors containing the se
 Consider the following example for a function of 4 variables (X mark "don't care" values):
 
 |    | A | B | C | D | f(A, B, C, D) |
---------------------------------------
+|----|---|---|---|---|---------------|
 | 0  | 0 | 0 | 0 | 0 |       0       |
 | 1  | 0 | 0 | 0 | 1 |       0       |
 | 2  | 0 | 0 | 1 | 0 |       0       |
