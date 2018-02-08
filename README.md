@@ -1,6 +1,6 @@
 # MinBool
 
-This project is a boolean expression simplifier in C++. It uses the Quine–McCluskey algorithm to compute the set of prime implicants, and then runs Petrick's method to find the minimum sum of products solution.
+This project is a boolean expression simplifier in C++. It uses the Quine–McCluskey algorithm to compute the set of prime implicants, and then iteratively extracts prime essentials and simplifies the implicant chart. When no chart simplification can be applied and no prime essential can be removed, it relies on heuristics to find a good prime to extract from the chart.
 
 This project does not depend on any other library, except of course the standard C++ library. It is distributed under the MIT license.
 

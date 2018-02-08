@@ -368,7 +368,7 @@ std::vector<MinTerm<Nbits>> minimize_boolean(
 int main(int argc, char** argv) {
     using namespace std::chrono;
 
-    auto seed = duration_cast<seconds>(high_resolution_clock::now().time_since_epoch()).count();
+    auto seed = duration_cast<milliseconds>(high_resolution_clock::now().time_since_epoch()).count();
     std::cout << "seed: " << seed << std::endl;
 
     std::mt19937 gen(seed);
