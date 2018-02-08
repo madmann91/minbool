@@ -211,6 +211,7 @@ struct PrimeChart {
     }
 
     void remove_heuristic(std::vector<MinTermN>& solution) {
+        assert(size() > 0);
         std::unordered_map<MinTermN, size_t, typename MinTermN::Hash> covers;
         for (auto& pair : columns) {
             for (auto& term : pair.second)
@@ -357,7 +358,7 @@ std::vector<MinTerm<Nbits>> minimize_boolean(
     do {
         bool change = chart.remove_essentials(solution);
         change |= chart.simplify();
-        if (!change)
+        if (!change && chart.size() > 0)
             chart.remove_heuristic(solution);
     } while (chart.size() > 0);
 
@@ -369,27 +370,26 @@ int main(int argc, char** argv) {
     using namespace std::chrono;
 
     auto seed = duration_cast<milliseconds>(high_resolution_clock::now().time_since_epoch()).count();
-    std::cout << "seed: " << seed << std::endl;
-
     std::mt19937 gen(seed);
     auto rand32 = std::uniform_int_distribution<size_t>(0, 256);
-    auto rand128 = std::uniform_int_distribution<size_t>(0, 1024);
+    auto rand1024 = std::uniform_int_distribution<size_t>(0, 1024);
     auto rand65535 = std::uniform_int_distribution<size_t>(0, 65535);
+
     std::unordered_set<uint8_t> on_set, dc_set;
-    for (size_t i = 0, n = rand128(gen); i < n; ++i)
+    for (size_t i = 0, n = rand1024(gen); i < n; ++i)
         on_set.emplace(rand65535(gen));
     for (size_t i = 0, n = rand32(gen); i < n; ++i) {
         uint8_t value = rand65535(gen);
         if (!on_set.count(value))
             dc_set.emplace(value);
     }
-
     auto start = high_resolution_clock::now();
     std::vector<uint16_t> on(on_set.begin(), on_set.end());
     std::vector<uint16_t> dc(dc_set.begin(), dc_set.end());
     auto solution = minimize_boolean<16>(on, dc);
     auto end = high_resolution_clock::now();
 
+    std::cout << "seed " << seed << std::endl;
     std::cout << duration_cast<milliseconds>(end - start).count() << " ms" << std::endl;
     std::cout << solution.size() << " terms" << std::endl;
     for (auto& term : solution)
