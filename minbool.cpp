@@ -377,15 +377,15 @@ int main(int /*argc*/, char** /*argv*/) {
 
     auto seed = duration_cast<milliseconds>(high_resolution_clock::now().time_since_epoch()).count();
     std::mt19937 gen(seed);
-    auto rand32 = std::uniform_int_distribution<size_t>(0, 256);
     auto rand1024 = std::uniform_int_distribution<size_t>(0, 1024);
+    auto rand8192 = std::uniform_int_distribution<size_t>(0, 8192);
     auto rand65535 = std::uniform_int_distribution<size_t>(0, 65535);
 
-    std::unordered_set<uint8_t> on_set, dc_set;
-    for (size_t i = 0, n = rand1024(gen); i < n; ++i)
+    std::unordered_set<uint16_t> on_set, dc_set;
+    for (size_t i = 0, n = rand8192(gen); i < n; ++i)
         on_set.emplace(rand65535(gen));
-    for (size_t i = 0, n = rand32(gen); i < n; ++i) {
-        uint8_t value = rand65535(gen);
+    for (size_t i = 0, n = rand1024(gen); i < n; ++i) {
+        auto value = rand65535(gen);
         if (!on_set.count(value))
             dc_set.emplace(value);
     }
