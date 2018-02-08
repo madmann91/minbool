@@ -342,6 +342,12 @@ std::vector<MinTerm<Nbits>> minimize_boolean(
     const std::vector<typename MinTerm<Nbits>::IntTypeN>& on_values,
     const std::vector<typename MinTerm<Nbits>::IntTypeN>& dc_values)
 {
+    if (on_values.size() <= 1) {
+        return on_values.size() == 1
+            ? std::vector<MinTerm<Nbits>>{ on_values.front() }
+            : std::vector<MinTerm<Nbits>>();
+    }
+
     std::vector<MinTerm<Nbits>> init;
     init.reserve(on_values.size() + dc_values.size());
     for (auto on : on_values)
@@ -366,7 +372,7 @@ std::vector<MinTerm<Nbits>> minimize_boolean(
     return solution;
 }
 
-int main(int argc, char** argv) {
+int main(int /*argc*/, char** /*argv*/) {
     using namespace std::chrono;
 
     auto seed = duration_cast<milliseconds>(high_resolution_clock::now().time_since_epoch()).count();
