@@ -4,77 +4,44 @@
 #include <cstdint>
 #include <bitset>
 #include <vector>
-#include <unordered_map>
 #include <algorithm>
 #include <cassert>
 #include <ostream>
 
 namespace minbool {
 
-inline size_t popcount(uint8_t  n) { return std::bitset<8>(n).count();  }
-inline size_t popcount(uint16_t n) { return std::bitset<16>(n).count(); }
-inline size_t popcount(uint32_t n) { return std::bitset<32>(n).count(); }
-inline size_t popcount(uint64_t n) { return std::bitset<64>(n).count(); }
-
-template <size_t Nbits> struct IntType {};
-template <> struct IntType<8>  { using Type = uint8_t;  };
-template <> struct IntType<16> { using Type = uint16_t; };
-template <> struct IntType<32> { using Type = uint32_t; };
-template <> struct IntType<64> { using Type = uint64_t; };
-
-constexpr size_t compute_int_size(size_t Nbits) {
-    return Nbits <= 8 ? 8 : 2 * compute_int_size(Nbits / 2);
-}
-
 template <size_t Nbits>
 struct MinTerm {
-    using IntTypeN = typename IntType<compute_int_size(Nbits)>::Type;
-
-    struct Hash {
-        size_t operator () (const MinTerm& term) const {
-            // Bernstein's hash function
-            return 33 * term.value ^ term.dash;
-        }
-    };
-
     enum Value {
         Zero = 0,
         One  = 1,
         Dash = 2
     };
 
-    MinTerm(IntTypeN value = 0, IntTypeN dash = 0)
+    MinTerm(std::bitset<Nbits> value, std::bitset<Nbits> dash)
         : value(value), dash(dash)
-    {
-        assert((value & ~((1 << Nbits) - 1)) == 0);
-        assert((dash  & ~((1 << Nbits) - 1)) == 0);
-    }
+    {}
 
     Value operator [] (size_t i) const {
-        assert(i < Nbits);
-        return (dash >> i) & 1 ? Dash : Value((value >> i) & 1);
-    }
-
-    size_t count_literals() const {
-        return Nbits - popcount(dash);
+        return dash[i] ? Dash : (value[i] ? One : Zero);
     }
 
     MinTerm combine(const MinTerm& other) const {
-        IntTypeN mask = (value ^ other.value) | (dash ^ other.dash);
+        auto mask = (value ^ other.value) | (dash ^ other.dash);
         return MinTerm(value & ~mask, dash | mask);
     }
 
     template <typename F>
-    void foreach_value(F f, size_t bit = 0, IntTypeN cur = 0) const {
+    void foreach_value(F f, size_t bit = 0, std::bitset<Nbits> cur = 0) const {
         if (bit == Nbits) {
             f(cur);
         } else {
             auto value = (*this)[bit];
             if (value == Dash) {
                 foreach_value(f, bit + 1, cur);
-                foreach_value(f, bit + 1, cur | (1 << bit));
+                foreach_value(f, bit + 1, cur.set(bit));
             } else {
-                foreach_value(f, bit + 1, cur | (value == Zero ? 0 : (1 << bit)));
+                foreach_value(f, bit + 1, cur.set(bit, value == One));
             }
         }
     }
@@ -87,8 +54,8 @@ struct MinTerm {
         return value == other.value && dash == other.dash;
     }
 
-    IntTypeN value;
-    IntTypeN dash;
+    std::bitset<Nbits> value;
+    std::bitset<Nbits> dash;
 };
 
 template <size_t Nbits>
@@ -107,33 +74,30 @@ template <size_t Nbits>
 struct ImplicantTable {
     using MinTermN = MinTerm<Nbits>;
 
-    std::vector<bool>     marks[Nbits + 1];
-    std::vector<MinTermN> terms[Nbits + 1];
+    size_t groups[Nbits + 1];
+    std::vector<MinTermN> terms;
 
-    size_t size() const {
-        size_t sum = 0;
-        for (size_t i = 0; i <= Nbits; ++i)
-            sum += terms[i].size();
-        return sum;
+    ImplicantTable(const std::vector<MinTermN>& init) {
+        for (auto& term : init)
+            groups[term.value.count()]++;
+        std::partial_sum(groups, groups + Nbits + 1, groups);
+        terms.resize(init.size());
+        for (auto& term : init)
+            terms[--groups[term.value.count()]] = term;
     }
 
-    void fill(const std::vector<MinTermN>& minterms) {
-        for (auto& term : minterms) {
-            auto i = popcount(term.value);
-            terms[i].push_back(term);
-            marks[i].push_back(false);
-        }
-    }
+    void combine(std::vector<MinTermN>& res, std::vector<bool>& marks) {
+        marks.resize(terms.size());
+        std::fill(marks.begin(), marks.end(), false);
 
-    void combine(std::vector<MinTermN>& res) {
-        for (size_t i = 0; i <= Nbits - 1; ++i) {
-            for (size_t j = 0; j < terms[i].size(); ++j) {
-                for (size_t k = 0; k < terms[i + 1].size(); ++k) {
-                    auto& term_a = terms[i][j];
-                    auto& term_b = terms[i + 1][k];
+        for (size_t i = 0; i < Nbits - 1; ++i) {
+            for (size_t j = groups[i]; j < groups[i + 1]; ++j) {
+                for (size_t k = groups[i + 1]; k < groups[i + 2], ++k) {
+                    auto& term_a = terms[j];
+                    auto& term_b = terms[k];
                     if ((term_a.value & term_b.value) == term_a.value && (term_a.dash == term_b.dash)) {
-                        marks[i][j] = true;
-                        marks[i + 1][k] = true;
+                        marks[j] = true;
+                        marks[k] = true;
                         res.push_back(term_a.combine(term_b));
                     }
                 }
@@ -141,12 +105,10 @@ struct ImplicantTable {
         }
     }
 
-    void primes(std::vector<MinTermN>& res) {
-        for (size_t i = 0; i <= Nbits; ++i) {
-            for (size_t j = 0; j < terms[i].size(); ++j) {
-                if (!marks[i][j])
-                    res.push_back(terms[i][j]);
-            }
+    void primes(std::vector<MinTermN>& res, const std::vector<bool>& marks) {
+        for (size_t i = 0; i < terms.size(); ++i) {
+            if (!marks[i])
+                res.push_back(terms[i]);
         }
     }
 };
@@ -169,45 +131,34 @@ std::ostream& operator << (std::ostream& os, const ImplicantTable<Nbits>& table)
 template <size_t Nbits>
 struct PrimeChart {
     using MinTermN = MinTerm<Nbits>;
-    using IntTypeN = typename MinTermN::IntTypeN;
 
-    std::unordered_map<IntTypeN, std::vector<MinTermN>> columns;
+    std::vector<std::bitset<Nbits>> columns;
+    std::vector<MinTermN> rows;
 
-    size_t size() const {
-        return columns.size();
-    }
-
-    void fill(const std::vector<MinTermN>& primes) {
+    PrimeChart(const std::vector<MinTermN>& primes)
+        : rows(primes)
+    {
         for (auto& prime : primes) {
-            prime.foreach_value([&] (IntTypeN value) {
-                columns[value].emplace_back(prime);
+            prime.foreach_value([&] (std::bitset<Nbits> value) {
+                columns.emplace_back(value);
             });
         }
-        for (auto& pair : columns)
-            std::sort(pair.second.begin(), pair.second.end());
+        std::sort(columns.begin(), columns.end());
+        columns.erase(std::unique(columns.begin(), columns.end()), columns.end());7
     }
 
-    void remove_columns(const std::vector<IntTypeN>& values) {
-        for (auto value : values)
-            columns.erase(value);
-    }
-
-    bool remove_essentials(std::vector<MinTermN>& essentials) {
+    bool remove_essentials(std::vector<MinTermN>& essentials, size_t ) {
+        std::vector<size_t> covers;
         size_t count = essentials.size();
-        for (auto& pair : columns) {
-            if (pair.second.size() == 1)
-                essentials.push_back(pair.second.front());
-        }
+        for (auto
+
         // No essential prime has been found
         if (essentials.size() == count)
             return false;
         std::sort(essentials.begin() + count, essentials.end());
         essentials.erase(std::unique(essentials.begin() + count, essentials.end()), essentials.end());
-
-        std::for_each(essentials.begin() + count, essentials.end(), [&] (const MinTermN& term) {
-            term.foreach_value([&] (IntTypeN value) {
-                columns.erase(value);
-            });
+        std::remove_if(elements.begin(), elements.end(), [] (const Element& elem) {
+            return 
         });
         return true;
     }
@@ -291,15 +242,15 @@ template <size_t Nbits>
 std::vector<MinTerm<Nbits>> prime_implicants(std::vector<MinTerm<Nbits>>& terms) {
     std::vector<MinTerm<Nbits>> primes;
 
+    std::vector<bool> marks;
     while (!terms.empty()) {
-        ImplicantTable<Nbits> table;
-        table.fill(terms);
+        ImplicantTable<Nbits> table(terms);
         terms.clear();
-        table.combine(terms);
+        table.combine(terms, marks);
         // Remove duplicates
         std::sort(terms.begin(), terms.end());
         terms.erase(std::unique(terms.begin(), terms.end()), terms.end());
-        table.primes(primes);
+        table.primes(primes, marks);
     }
     return primes;
 }
