@@ -10,7 +10,7 @@ int main(int /*argc*/, char** /*argv*/) {
     using namespace std::chrono;
     using namespace minbool;
 
-    auto seed = duration_cast<milliseconds>(high_resolution_clock::now().time_since_epoch()).count();
+    auto seed = 1518454078902;//duration_cast<milliseconds>(high_resolution_clock::now().time_since_epoch()).count();
     std::mt19937 gen(seed);
     auto rand1024 = std::uniform_int_distribution<size_t>(0, 1024);
     auto rand8192 = std::uniform_int_distribution<size_t>(0, 8192);

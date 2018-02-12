@@ -107,33 +107,32 @@ template <size_t Nbits>
 struct ImplicantTable {
     using MinTermN = MinTerm<Nbits>;
 
-    std::vector<bool>     marks[Nbits + 1];
-    std::vector<MinTermN> terms[Nbits + 1];
+    size_t groups[Nbits + 1];
+    std::vector<bool>     marks;
+    std::vector<MinTermN> terms;
 
-    size_t size() const {
-        size_t sum = 0;
-        for (size_t i = 0; i <= Nbits; ++i)
-            sum += terms[i].size();
-        return sum;
-    }
+    size_t size() const { return terms.size(); }
 
     void fill(const std::vector<MinTermN>& minterms) {
-        for (auto& term : minterms) {
-            auto i = popcount(term.value);
-            terms[i].push_back(term);
-            marks[i].push_back(false);
-        }
+        std::fill(groups, groups + Nbits + 1, 0);
+        for (auto& term : minterms)
+            groups[popcount(term.value)]++;
+        std::partial_sum(groups, groups + Nbits + 1, groups);
+        terms.resize(minterms.size());
+        marks.resize(minterms.size());
+        for (auto& term : minterms)
+            terms[--groups[popcount(term.value)]] = term;
     }
 
     void combine(std::vector<MinTermN>& res) {
-        for (size_t i = 0; i <= Nbits - 1; ++i) {
-            for (size_t j = 0; j < terms[i].size(); ++j) {
-                for (size_t k = 0; k < terms[i + 1].size(); ++k) {
-                    auto& term_a = terms[i][j];
-                    auto& term_b = terms[i + 1][k];
+        for (size_t i = 0; i < Nbits - 1; ++i) {
+            for (size_t j = groups[i]; j < groups[i + 1]; ++j) {
+                for (size_t k = groups[i + 1]; k < groups[i + 2]; ++k) {
+                    auto& term_a = terms[j];
+                    auto& term_b = terms[k];
                     if ((term_a.value & term_b.value) == term_a.value && (term_a.dash == term_b.dash)) {
-                        marks[i][j] = true;
-                        marks[i + 1][k] = true;
+                        marks[j] = true;
+                        marks[k] = true;
                         res.push_back(term_a.combine(term_b));
                     }
                 }
@@ -142,11 +141,9 @@ struct ImplicantTable {
     }
 
     void primes(std::vector<MinTermN>& res) {
-        for (size_t i = 0; i <= Nbits; ++i) {
-            for (size_t j = 0; j < terms[i].size(); ++j) {
-                if (!marks[i][j])
-                    res.push_back(terms[i][j]);
-            }
+        for (size_t i = 0; i < terms.size(); ++i) {
+            if (!marks[i])
+                res.push_back(terms[i]);
         }
     }
 };
