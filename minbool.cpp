@@ -25,8 +25,8 @@ int main(int /*argc*/, char** /*argv*/) {
             dc_set.emplace(value);
     }
     auto start = high_resolution_clock::now();
-    std::vector<std::bitset<16>> on(on_set.begin(), on_set.end());
-    std::vector<std::bitset<16>> dc(dc_set.begin(), dc_set.end());
+    std::vector<BitSet<16>> on(on_set.begin(), on_set.end());
+    std::vector<BitSet<16>> dc(dc_set.begin(), dc_set.end());
     auto solution = minimize_boolean(on, dc);
     auto end = high_resolution_clock::now();
 
