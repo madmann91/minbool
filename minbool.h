@@ -4,21 +4,47 @@
 #include <cstdint>
 #include <bitset>
 #include <vector>
+#include <unordered_map>
 #include <algorithm>
 #include <cassert>
 #include <ostream>
 
 namespace minbool {
 
+template <size_t N>
+bool increase(std::bitset<N>& bs)
+{
+    for (size_t i = 0; i != bs.size(); ++i) {
+        if (bs.flip(i).test(i) == true)
+            return true;
+    }
+    return false;
+}
+
+template<size_t N>
+bool operator < (const std::bitset<N>& x, const std::bitset<N>& y) {
+    for (int i = N-1; i >= 0; i--) {
+        if (x[i] ^ y[i]) return y[i];
+    }
+    return false;
+}
+
 template <size_t Nbits>
 struct MinTerm {
+    struct Hash {
+        size_t operator () (const MinTerm& term) const noexcept {
+            std::hash<std::bitset<Nbits>> hash;
+            return 33 * hash(term.value) ^ hash(term.dash);
+        }
+    };
+
     enum Value {
         Zero = 0,
         One  = 1,
         Dash = 2
     };
 
-    MinTerm(std::bitset<Nbits> value, std::bitset<Nbits> dash)
+    MinTerm(std::bitset<Nbits> value, std::bitset<Nbits> dash = 0)
         : value(value), dash(dash)
     {}
 
@@ -92,7 +118,7 @@ struct ImplicantTable {
 
         for (size_t i = 0; i < Nbits - 1; ++i) {
             for (size_t j = groups[i]; j < groups[i + 1]; ++j) {
-                for (size_t k = groups[i + 1]; k < groups[i + 2], ++k) {
+                for (size_t k = groups[i + 1]; k < groups[i + 2]; ++k) {
                     auto& term_a = terms[j];
                     auto& term_b = terms[k];
                     if ((term_a.value & term_b.value) == term_a.value && (term_a.dash == term_b.dash)) {
@@ -132,57 +158,72 @@ template <size_t Nbits>
 struct PrimeChart {
     using MinTermN = MinTerm<Nbits>;
 
-    std::vector<std::bitset<Nbits>> columns;
-    std::vector<MinTermN> rows;
+    std::unordered_map<std::bitset<Nbits>, std::vector<MinTermN>> columns;
+    std::unordered_map<MinTermN, std::vector<std::bitset<Nbits>>, typename MinTermN::Hash> rows;
 
-    PrimeChart(const std::vector<MinTermN>& primes)
-        : rows(primes)
-    {
+    PrimeChart(const std::vector<MinTermN>& primes) {
         for (auto& prime : primes) {
             prime.foreach_value([&] (std::bitset<Nbits> value) {
-                columns.emplace_back(value);
+                columns[value].emplace_back(prime);
+                rows[prime].emplace_back(value);
             });
         }
-        std::sort(columns.begin(), columns.end());
-        columns.erase(std::unique(columns.begin(), columns.end()), columns.end());7
+        for (auto& pair : rows)
+            std::sort(pair.second.begin(), pair.second.end());
+        for (auto& pair : columns)
+            std::sort(pair.second.begin(), pair.second.end());
     }
 
-    bool remove_essentials(std::vector<MinTermN>& essentials, size_t ) {
-        std::vector<size_t> covers;
-        size_t count = essentials.size();
-        for (auto
+    size_t size() const { return columns.size(); }
 
+    void remove_row(const MinTermN& row) {
+        rows.erase(row);
+        // Remove columns that are covered by this row
+        for (auto it = columns.begin(); it != columns.end(); ++it) {
+            if (std::binary_search(it->second.begin(), it->second.end(), row))
+                columns.erase(it);
+        }
+    }
+
+    void remove_column(const std::bitset<Nbits>& column) {
+        columns.erase(column);
+        // If a row only covers this column, remove it
+        for (auto it = rows.begin(); it != rows.end(); ++it) {
+            it->second.erase(std::remove(it->second.begin(), it->second.end(), column), it->second.end());
+            if (it->second.size() == 0)
+                rows.erase(it);
+        }
+    }
+
+    bool remove_essentials(std::vector<MinTermN>& essentials) {
+        size_t count = essentials.size();
+        for (auto& pair : columns) {
+            if (pair.second.size() == 1)
+                essentials.emplace_back(pair.second.front());
+        }
         // No essential prime has been found
         if (essentials.size() == count)
             return false;
         std::sort(essentials.begin() + count, essentials.end());
         essentials.erase(std::unique(essentials.begin() + count, essentials.end()), essentials.end());
-        std::remove_if(elements.begin(), elements.end(), [] (const Element& elem) {
-            return 
-        });
+        for (auto& essential : essentials)
+            remove_row(essential);
         return true;
     }
 
     void remove_heuristic(std::vector<MinTermN>& solution) {
         assert(size() > 0);
-        std::unordered_map<MinTermN, size_t, typename MinTermN::Hash> covers;
-        for (auto& pair : columns) {
-            for (auto& term : pair.second)
-                covers[term]++;
-        }
         // Heuristic: Remove the term that covers the most columns
         size_t max_covers = 0;
-        MinTermN term;
-        for (auto& pair : covers) {
-            if (pair.second > max_covers) {
-                max_covers = pair.second;
+        MinTermN term(0, 0);
+        for (auto& pair : rows) {
+            if (pair.second.size() > max_covers) {
+                max_covers = pair.second.size();
                 term = pair.first;
             }
         }
         solution.emplace_back(term);
-        term.foreach_value([&] (IntTypeN value) {
-            columns.erase(value);
-        });
+        remove_row(term);
     }
 
     bool simplify() {
@@ -195,22 +236,12 @@ struct PrimeChart {
                 // Dominating columns are eliminated
                 if (std::includes(pair2.second.begin(), pair2.second.end(),
                                   pair1.second.begin(), pair1.second.end())) {
-                    columns.erase(pair2.first);
+                    remove_column(pair2.first);
                     change = true;
                     break;
                 }
             }
         }
-
-        // Transpose columns => rows
-        std::unordered_map<MinTermN, std::vector<IntTypeN>, typename MinTermN::Hash> rows;
-        for (auto& pair : columns) {
-            for (auto& term : pair.second)
-                rows[term].emplace_back(pair.first);
-            pair.second.clear();
-        }
-        for (auto& pair : rows)
-            std::sort(pair.second.begin(), pair.second.end());
 
         for (auto& pair1 : rows) {
             for (auto& pair2 : rows) {
@@ -219,20 +250,12 @@ struct PrimeChart {
                 // Dominated rows are eliminated
                 if (std::includes(pair1.second.begin(), pair1.second.end(),
                                   pair2.second.begin(), pair2.second.end())) {
-                    rows.erase(pair2.first);
+                    remove_row(pair2.first);
                     change = true;
                     break;
                 }
             }
         }
-
-        // Transpose rows => columns
-        for (auto& pair : rows) {
-            for (auto& value : pair.second)
-                columns[value].emplace_back(pair.first);
-        }
-        for (auto& pair : columns)
-            std::sort(pair.second.begin(), pair.second.end());
 
         return change;
     }
@@ -273,27 +296,27 @@ bool eval_boolean(const std::vector<MinTerm<Nbits>>& solution, typename MinTerm<
 
 template <size_t Nbits>
 bool check_solution(const std::vector<MinTerm<Nbits>>& solution,
-                    const std::vector<typename MinTerm<Nbits>::IntTypeN>& on_values,
-                    const std::vector<typename MinTerm<Nbits>::IntTypeN>& dc_values) {
-    using IntTypeN = typename MinTerm<Nbits>::IntTypeN;
-    std::unordered_set<IntTypeN> not_off;
+                    const std::vector<std::bitset<Nbits>>& on_values,
+                    const std::vector<std::bitset<Nbits>>& dc_values) {
+    std::unordered_set<std::bitset<Nbits>> not_off;
     for (auto v : on_values) not_off.emplace(v);
     for (auto v : dc_values) not_off.emplace(v);
     for (auto v : on_values) {
         if (!eval_boolean(solution, v))
             return false;
     }
-    for (IntTypeN i = (1 << Nbits) - 1; i > 0; --i) {
+    auto i = std::bitset<Nbits>(0);
+    do {
         if (not_off.count(i) == 0 && eval_boolean(solution, i))
             return false;
-    }
-    return not_off.count(0) != 0 || !eval_boolean(solution, 0);
+    } while (increase(i));
+    return true;
 }
 
 template <size_t Nbits>
 std::vector<MinTerm<Nbits>> minimize_boolean(
-    const std::vector<typename MinTerm<Nbits>::IntTypeN>& on_values,
-    const std::vector<typename MinTerm<Nbits>::IntTypeN>& dc_values)
+    const std::vector<std::bitset<Nbits>>& on_values,
+    const std::vector<std::bitset<Nbits>>& dc_values)
 {
     if (on_values.size() <= 1) {
         return on_values.size() == 1
@@ -309,9 +332,9 @@ std::vector<MinTerm<Nbits>> minimize_boolean(
         init.emplace_back(dc);
     auto primes = prime_implicants(init);
 
-    PrimeChart<Nbits> chart;
-    chart.fill(primes);
-    chart.remove_columns(dc_values);
+    PrimeChart<Nbits> chart(primes);
+    for (auto dc : dc_values)
+        chart.remove_column(dc);
 
     std::vector<MinTerm<Nbits>> solution;
     do {

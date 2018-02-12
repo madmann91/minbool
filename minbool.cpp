@@ -25,9 +25,9 @@ int main(int /*argc*/, char** /*argv*/) {
             dc_set.emplace(value);
     }
     auto start = high_resolution_clock::now();
-    std::vector<uint16_t> on(on_set.begin(), on_set.end());
-    std::vector<uint16_t> dc(dc_set.begin(), dc_set.end());
-    auto solution = minimize_boolean<16>(on, dc);
+    std::vector<std::bitset<16>> on(on_set.begin(), on_set.end());
+    std::vector<std::bitset<16>> dc(dc_set.begin(), dc_set.end());
+    auto solution = minimize_boolean(on, dc);
     auto end = high_resolution_clock::now();
 
     std::cout << "seed " << seed << std::endl;
@@ -39,8 +39,8 @@ int main(int /*argc*/, char** /*argv*/) {
     std::ofstream of("test.esp");
     of << ".i 16\n";
     of << ".o 1\n";
-    for (auto i : on) of << std::bitset<16>(i) << " 1\n";
-    for (auto i : dc) of << std::bitset<16>(i) << " -\n";
+    for (auto i : on) of << i << " 1\n";
+    for (auto i : dc) of << i << " -\n";
     of << ".e\n";
     return 0;
 }
