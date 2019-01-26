@@ -5,9 +5,11 @@
 #include <bitset>
 #include <vector>
 #include <unordered_map>
+#include <unordered_set>
 #include <algorithm>
 #include <cassert>
 #include <ostream>
+#include <numeric>
 
 namespace minbool {
 
@@ -107,17 +109,17 @@ template <size_t Nbits>
 struct ImplicantTable {
     using MinTermN = MinTerm<Nbits>;
 
-    size_t groups[Nbits + 1];
+    size_t groups[Nbits + 2];
     std::vector<bool>     marks;
     std::vector<MinTermN> terms;
 
     size_t size() const { return terms.size(); }
 
     void fill(const std::vector<MinTermN>& minterms) {
-        std::fill(groups, groups + Nbits + 1, 0);
+        std::fill(groups, groups + Nbits + 2, 0);
         for (auto& term : minterms)
             groups[popcount(term.value)]++;
-        std::partial_sum(groups, groups + Nbits + 1, groups);
+        std::partial_sum(groups, groups + Nbits + 2, groups);
         terms.resize(minterms.size());
         marks.resize(minterms.size());
         for (auto& term : minterms)
@@ -125,7 +127,7 @@ struct ImplicantTable {
     }
 
     void combine(std::vector<MinTermN>& res) {
-        for (size_t i = 0; i < Nbits - 1; ++i) {
+        for (size_t i = 0; i < Nbits; ++i) {
             for (size_t j = groups[i]; j < groups[i + 1]; ++j) {
                 for (size_t k = groups[i + 1]; k < groups[i + 2]; ++k) {
                     auto& term_a = terms[j];
