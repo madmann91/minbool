@@ -45,8 +45,8 @@ struct MinTerm {
         Dash = 2
     };
 
-    MinTerm(IntTypeN value = 0, IntTypeN dash = 0)
-        : value(value), dash(dash)
+    MinTerm(IntTypeN newValue = 0, IntTypeN newDash = 0)
+        : value(newValue), dash(newDash)
     {
         assert((value & ~((1 << Nbits) - 1)) == 0);
         assert((dash  & ~((1 << Nbits) - 1)) == 0);
@@ -62,21 +62,21 @@ struct MinTerm {
     }
 
     MinTerm combine(const MinTerm& other) const {
-        IntTypeN mask = (value ^ other.value) | (dash ^ other.dash);
+        const IntTypeN mask = (value ^ other.value) | (dash ^ other.dash);
         return MinTerm(value & ~mask, dash | mask);
     }
 
     template <typename F>
-    void foreach_value(F f, size_t bit = 0, IntTypeN cur = 0) const {
+    void foreach_value(F f, const size_t bit = 0, IntTypeN cur = 0) const {
         if (bit == Nbits) {
             f(cur);
         } else {
-            auto value = (*this)[bit];
-            if (value == Dash) {
+            const auto actualValue = (*this)[bit];
+            if (actualValue == Dash) {
                 foreach_value(f, bit + 1, cur);
                 foreach_value(f, bit + 1, cur | (1 << bit));
             } else {
-                foreach_value(f, bit + 1, cur | (value == Zero ? 0 : (1 << bit)));
+                foreach_value(f, bit + 1, cur | (actualValue == Zero ? 0 : (1 << bit)));
             }
         }
     }
@@ -96,7 +96,7 @@ struct MinTerm {
 template <size_t Nbits>
 std::ostream& operator << (std::ostream& os, const MinTerm<Nbits>& term) {
     for (int i = Nbits - 1; i >= 0; --i) {
-        auto value = term[i];
+        const auto value = term[i];
         if (value != MinTerm<Nbits>::Dash)
             os << (uint32_t)value;
         else
@@ -192,7 +192,7 @@ struct PrimeChart {
     }
 
     bool remove_essentials(std::vector<MinTermN>& essentials) {
-        size_t count = essentials.size();
+        const size_t count = essentials.size();
         for (auto& pair : columns) {
             if (pair.second.size() == 1)
                 essentials.push_back(pair.second.front());
@@ -308,7 +308,7 @@ bool eval_boolean(const std::vector<MinTerm<Nbits>>& solution, typename MinTerm<
     for (auto& term : solution) {
         bool prod = true;
         for (size_t i = 0; i < Nbits; ++i) {
-            bool bit = ((v >> i) & 1) ? true : false;
+            const bool bit = ((v >> i) & 1) ? true : false;
             if (term[i] == MinTerm<Nbits>::One)
                 prod &= bit;
             else if (term[i] == MinTerm<Nbits>::Zero)
