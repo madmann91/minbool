@@ -6,7 +6,7 @@ This project does not depend on any other library, except of course the standard
 
 ## Building and Running
 
-    g++ minbool.cpp -pedantic -Wall -Wextra -O3 -DNDEBUG -march=native -std=c++11 -o minbool
+    g++ minbool.cpp -pedantic -Wall -Wextra -O3 -DNDEBUG -std=c++11 -o minbool
     ./minbool
 
 ## Using the Simplifier
