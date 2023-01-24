@@ -71,12 +71,12 @@ struct MinTerm {
         if (bit == Nbits) {
             f(cur);
         } else {
-            auto value = (*this)[bit];
-            if (value == Dash) {
+            auto bit_value = (*this)[bit];
+            if (bit_value == Dash) {
                 foreach_value(f, bit + 1, cur);
                 foreach_value(f, bit + 1, cur | (1 << bit));
             } else {
-                foreach_value(f, bit + 1, cur | (value == Zero ? 0 : (1 << bit)));
+                foreach_value(f, bit + 1, cur | (bit_value == Zero ? 0 : (1 << bit)));
             }
         }
     }
