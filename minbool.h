@@ -289,7 +289,6 @@ struct PrimeChart {
 template <size_t Nbits>
 std::vector<MinTerm<Nbits>> prime_implicants(std::vector<MinTerm<Nbits>>& terms) {
     std::vector<MinTerm<Nbits>> primes;
-
     while (!terms.empty()) {
         ImplicantTable<Nbits> table;
         table.fill(terms);
@@ -343,11 +342,8 @@ std::vector<MinTerm<Nbits>> minimize_boolean(
     const std::vector<typename MinTerm<Nbits>::IntTypeN>& on_values,
     const std::vector<typename MinTerm<Nbits>::IntTypeN>& dc_values)
 {
-    if (on_values.size() <= 1) {
-        return on_values.size() == 1
-            ? std::vector<MinTerm<Nbits>>{ on_values.front() }
-            : std::vector<MinTerm<Nbits>>();
-    }
+    if (on_values.empty())
+        return {};
 
     std::vector<MinTerm<Nbits>> init;
     init.reserve(on_values.size() + dc_values.size());
